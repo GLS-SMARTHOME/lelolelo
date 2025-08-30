@@ -64,8 +64,6 @@
     <textarea id="itemDetail" placeholder="Detail"></textarea>
     <label>Phone Number:</label>
     <input type="text" id="itemPhone" placeholder="Phone Number" />
-    <label>Pictures:</label>
-    <input type="file" id="itemPictures" multiple />
     <button class="save-btn" id="saveItemBtn">Save</button>
     <button class="close-btn" onclick="closeModal()">&times;</button>
   </div>
@@ -77,7 +75,6 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyAIlkvwyaF6FPPbXBJDqHwuTS5S3QKG3l8",
@@ -91,7 +88,6 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const storage = firebase.storage();
 </script>
 
 <script>
@@ -112,7 +108,11 @@ document.getElementById('vendreModal').addEventListener('click', e=>{ if(e.targe
 /* Google Maps */
 let map, userOverlay, currentPos, firstLocation = true;
 function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), { zoom:14, center:{lat:0,lng:0}, disableDefaultUI:true });
+  map = new google.maps.Map(document.getElementById("map"), { 
+    zoom:14, 
+    center:{lat:0,lng:0}, 
+    disableDefaultUI:true 
+  });
 
   function UserOverlay(position,map){ this.position=position; this.div=null; this.setMap(map); }
   UserOverlay.prototype = new google.maps.OverlayView();
@@ -130,33 +130,70 @@ function initMap() {
   } else alert("Geolocation not supported.");
 
   /* Recenter */
-  document.getElementById("recenterBtn").addEventListener("click",()=>{ if(currentPos) map.setCenter(currentPos); });
+  document.getElementById("recenterBtn").addEventListener("click",()=>{ if(currentPos) map.panTo(currentPos); });
+
+  /* 🔹 Load all saved items from RTDB and place markers */
+  db.ref().on("value", snapshot => {
+    const data = snapshot.val();
+    if(!data) return;
+
+    // Clear old markers if needed
+    if(window.itemMarkers){
+      window.itemMarkers.forEach(m=>m.setMap(null));
+    }
+    window.itemMarkers = [];
+
+    // Loop over phone numbers
+    Object.keys(data).forEach(phone=>{
+      const items = data[phone];
+      Object.keys(items).forEach(key=>{
+        const item = items[key];
+        if(item.lat && item.lng){
+          const marker = new google.maps.Marker({
+            position: {lat:item.lat, lng:item.lng},
+            map: map,
+            title: `${key}`,
+            icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" // red pin for items
+          });
+
+          const info = new google.maps.InfoWindow({
+            content: `
+              <strong>${key}</strong><br>
+              Price: ${item.price}<br>
+              Detail: ${item.detail}<br>
+              Phone: ${phone}
+            `
+          });
+          marker.addListener("click", ()=> info.open(map, marker));
+
+          window.itemMarkers.push(marker);
+        }
+      });
+    });
+  });
 }
 
-/* Save Item */
+/* Save Item (no pictures) */
 document.getElementById('saveItemBtn').addEventListener('click', async ()=>{
   const title=document.getElementById('itemTitle').value.trim();
   const price=document.getElementById('itemPrice').value.trim();
   const detail=document.getElementById('itemDetail').value.trim();
   const phone=document.getElementById('itemPhone').value.trim();
-  const pictures=document.getElementById('itemPictures').files;
+
   if(!title||!price||!detail||!phone){ alert("Please fill all fields."); return; }
   if(!currentPos){ alert("Location not found yet."); return; }
 
   const lat=currentPos.lat(), lng=currentPos.lng();
   const safePhone=phone.replace(/\D/g,'');
 
-  let pictureURLs=[];
-  for(let i=0;i<pictures.length;i++){
-    const file=pictures[i];
-    const storageRef=storage.ref().child(`items/${safePhone}/${Date.now()}_${file.name}`);
-    await storageRef.put(file);
-    pictureURLs.push(await storageRef.getDownloadURL());
+  try {
+    await db.ref(`${safePhone}/${title}_${Date.now()}`).set({price, detail, lat, lng});
+    alert("Item saved successfully!");
+    closeModal();
+  } catch(err){
+    console.error("Database write error:", err);
+    alert("Failed to save item. Check console.");
   }
-
-  await db.ref(`${safePhone}/${title}`).set({price, detail, pictures: pictureURLs, lat, lng});
-  alert("Item saved successfully!");
-  closeModal();
 });
 </script>
 
