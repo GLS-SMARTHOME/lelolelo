@@ -1,304 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Live Map – Vendre / Location / Course</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Live Map with User Location</title>
   <style>
-    html, body, #map {
+    html, body {
       height: 100%;
       margin: 0;
       padding: 0;
+      font-family: Arial, sans-serif;
     }
-
-    /* Floating dropdown button (top-right) */
-    .menu {
-      position: fixed;
-      top: env(safe-area-inset-top, 16px);
-      right: env(safe-area-inset-right, 16px);
-      z-index: 5;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    #map {
+      height: 100%;
+      width: 100%;
     }
-
-    .menu-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(0,0,0,0.1);
-      background: #ffffff;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
-      cursor: pointer;
-      user-select: none;
-    }
-    .menu-btn span { font-weight: 600; }
-    .chev {
-      width: 0; height: 0;
-      border-left: 6px solid transparent;
-      border-right: 6px solid transparent;
-      border-top: 7px solid #111827;
-      transition: transform .18s ease;
-    }
-    .menu.open .chev { transform: rotate(180deg); }
-
-    .menu-list {
+    /* Dropdown button */
+    .dropdown {
       position: absolute;
-      right: 0;
-      margin-top: 8px;
-      min-width: 180px;
-      background: #fff;
-      border: 1px solid rgba(0,0,0,0.08);
-      border-radius: 12px;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.18);
-      overflow: hidden;
-      display: none;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
     }
-    .menu.open .menu-list { display: block; }
-
-    .menu-item {
-      padding: 12px 14px;
-      font-size: 15px;
-      cursor: pointer;
-      transition: background .12s ease;
-      white-space: nowrap;
+    select {
+      padding: 8px 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: white;
+      outline: none;
     }
-    .menu-item:hover { background: #f3f4f6; }
-
-    /* Custom blue pulsing user marker */
-    .me-marker {
-      position: relative;
-      width: 16px;
-      height: 16px;
-      transform: translate(-50%, -50%);
-    }
-    .me-marker .dot {
-      position: absolute;
-      inset: 0;
-      border-radius: 50%;
+    /* Blue dot style */
+    .pulse {
+      width: 20px;
+      height: 20px;
       background: #3b82f6;
-      box-shadow: 0 0 0 2px #ffffff;
-    }
-    .me-marker .pulse {
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 16px; height: 16px;
       border-radius: 50%;
-      background: rgba(59,130,246,0.35);
-      transform: translate(-50%, -50%);
-      animation: pulse 1.6s ease-out infinite;
-      pointer-events: none;
+      position: relative;
+    }
+    .pulse::after {
+      content: "";
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      position: absolute;
+      top: -10px;
+      left: -10px;
+      background: rgba(59,130,246,0.3);
+      animation: pulse 2s infinite;
     }
     @keyframes pulse {
-      0% { transform: translate(-50%, -50%) scale(1); opacity: .8; }
-      70% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
-      100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+      0% { transform: scale(0.8); opacity: 1; }
+      100% { transform: scale(2); opacity: 0; }
     }
-
-    .legend {
-      position: fixed;
-      left: env(safe-area-inset-left, 16px);
-      bottom: env(safe-area-inset-bottom, 16px);
-      z-index: 5;
-      padding: 8px 10px;
-      background: rgba(255,255,255,0.92);
-      border: 1px solid rgba(0,0,0,0.08);
-      border-radius: 10px;
-      font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-
-    /* Locate Me button */
-    .locate-btn {
-      position: fixed;
-      right: env(safe-area-inset-right, 16px);
-      bottom: env(safe-area-inset-bottom, 80px);
-      z-index: 5;
-      background: #fff;
-      border: 1px solid rgba(0,0,0,0.1);
-      border-radius: 50%;
-      width: 44px;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
-      cursor: pointer;
-    }
-    .locate-btn:hover { background: #f9fafb; }
   </style>
 </head>
 <body>
-  <div id="map"></div>
-
-  <!-- Floating dropdown -->
-  <div class="menu" id="menu">
-    <button class="menu-btn" id="menuBtn" aria-haspopup="true" aria-expanded="false">
-      <span>Menu</span>
-      <div class="chev"></div>
-    </button>
-    <div class="menu-list">
-      <div class="menu-item" data-action="vendre">Vendre</div>
-      <div class="menu-item" data-action="location">Location</div>
-      <div class="menu-item" data-action="course">Course</div>
-    </div>
+  <!-- Dropdown -->
+  <div class="dropdown">
+    <select>
+      <option>Vendre</option>
+      <option>Location</option>
+      <option>Course</option>
+    </select>
   </div>
 
-  <div class="legend">• Blue dot = your live location</div>
-  <div class="locate-btn" id="locateBtn" title="Locate Me">📍</div>
+  <!-- Map -->
+  <div id="map"></div>
 
   <script>
-    // --- Dropdown logic
-    const menu = document.getElementById('menu');
-    const menuBtn = document.getElementById('menuBtn');
-    menuBtn.addEventListener('click', () => {
-      const isOpen = menu.classList.toggle('open');
-      menuBtn.setAttribute('aria-expanded', String(isOpen));
-    });
-    document.addEventListener('click', (e) => {
-      if (!menu.contains(e.target)) {
-        menu.classList.remove('open');
-        menuBtn.setAttribute('aria-expanded', 'false');
-      }
-    });
-    document.querySelectorAll('.menu-item').forEach(item => {
-      item.addEventListener('click', () => {
-        alert('Action: ' + item.textContent);
-        menu.classList.remove('open');
-        menuBtn.setAttribute('aria-expanded', 'false');
-      });
-    });
-
-    // --- Map + Live location
-    let map, meMarker, accuracyCircle, watchId;
-    let firstUpdate = true;
-    let lastLatLng = null;
-
-    class HtmlMarker extends google.maps.OverlayView {
-      constructor(position, html) {
-        super();
-        this.position = position;
-        this.html = html;
-        this.div = null;
-      }
-      onAdd() {
-        this.div = document.createElement('div');
-        this.div.innerHTML = this.html;
-        this.getPanes().overlayMouseTarget.appendChild(this.div);
-      }
-      draw() {
-        const proj = this.getProjection();
-        if (!proj || !this.div) return;
-        const point = proj.fromLatLngToDivPixel(this.position);
-        if (!point) return;
-        this.div.style.position = 'absolute';
-        this.div.style.left = point.x + 'px';
-        this.div.style.top = point.y + 'px';
-      }
-      onRemove() {
-        if (this.div && this.div.parentNode) this.div.parentNode.removeChild(this.div);
-        this.div = null;
-      }
-      setPosition(latLng) {
-        this.position = latLng;
-        this.draw();
-      }
-    }
+    let map, userMarker;
 
     function initMap() {
-      map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: 0, lng: 0 },
-        zoom: 15,
-        mapTypeControl: false,
-        fullscreenControl: true,
-        streetViewControl: false,
-        clickableIcons: false,
+      map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 14,
+        center: { lat: 20, lng: 0 }, // fallback center
+        disableDefaultUI: true,
       });
 
-      if ('geolocation' in navigator) {
-        watchId = navigator.geolocation.watchPosition(
-          pos => {
-            const { latitude, longitude, accuracy } = pos.coords;
-            const latLng = new google.maps.LatLng(latitude, longitude);
-            lastLatLng = latLng;
+      // Try to get user location
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(
+          (pos) => {
+            const userPos = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            };
 
-            const html = `
-              <div class="me-marker">
-                <div class="pulse"></div>
-                <div class="dot"></div>
-              </div>`;
-            if (!meMarker) {
-              meMarker = new HtmlMarker(latLng, html);
-              meMarker.setMap(map);
+            // Center map on first location update
+            if (!userMarker) {
+              map.setCenter(userPos);
+              userMarker = new google.maps.OverlayView();
+              userMarker.onAdd = function () {
+                const div = document.createElement("div");
+                div.className = "pulse";
+                this.div = div;
+                const panes = this.getPanes();
+                panes.overlayImage.appendChild(div);
+              };
+              userMarker.draw = function () {
+                const overlayProjection = this.getProjection();
+                const pos = overlayProjection.fromLatLngToDivPixel(
+                  new google.maps.LatLng(userPos)
+                );
+                if (pos && this.div) {
+                  this.div.style.left = pos.x - 10 + "px";
+                  this.div.style.top = pos.y - 10 + "px";
+                  this.div.style.position = "absolute";
+                }
+              };
+              userMarker.onRemove = function () {
+                if (this.div) {
+                  this.div.parentNode.removeChild(this.div);
+                  this.div = null;
+                }
+              };
+              userMarker.setMap(map);
             } else {
-              meMarker.setPosition(latLng);
-            }
-
-            if (!accuracyCircle) {
-              accuracyCircle = new google.maps.Circle({
-                strokeColor: '#3b82f6',
-                strokeOpacity: 0.25,
-                strokeWeight: 1,
-                fillColor: '#3b82f6',
-                fillOpacity: 0.10,
-                map,
-                center: latLng,
-                radius: accuracy || 30
-              });
-            } else {
-              accuracyCircle.setCenter(latLng);
-              accuracyCircle.setRadius(accuracy || 30);
-            }
-
-            // ✅ Center only on first update
-            if (firstUpdate) {
-              map.setCenter(latLng);
-              firstUpdate = false;
+              map.setCenter(userPos);
             }
           },
-          err => {
-            let msg = "Unable to get your location. ";
-            switch (err.code) {
-              case err.PERMISSION_DENIED:
-                msg += "Permission denied. Please allow location access in your browser settings.";
-                break;
-              case err.POSITION_UNAVAILABLE:
-                msg += "Location information is unavailable.";
-                break;
-              case err.TIMEOUT:
-                msg += "The request timed out.";
-                break;
-              default:
-                msg += "An unknown error occurred.";
-            }
-            alert(msg);
-            map.setZoom(2);
-            map.setCenter({ lat: 20, lng: 0 });
+          (err) => {
+            console.warn("Geolocation error:", err.message);
+            alert("Please allow location access in your browser.");
           },
-          { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
+          { enableHighAccuracy: true }
         );
       } else {
-        alert('Geolocation not supported on this device/browser.');
-        map.setZoom(2);
-        map.setCenter({ lat: 20, lng: 0 });
+        alert("Geolocation not supported in this browser.");
       }
     }
-
-    // --- Locate Me button
-    document.getElementById('locateBtn').addEventListener('click', () => {
-      if (lastLatLng) {
-        map.panTo(lastLatLng);
-        map.setZoom(16);
-      } else {
-        alert("No location available yet.");
-      }
-    });
-
-    window.initMap = initMap;
   </script>
 
-  <!-- Google Maps JS API (replace YOUR_API_KEY) -->
-  <script async
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDjdnkFWOnh1u2cWf5RFURytU8Zk3fmOhk&callback=initMap">
-  </script>
+  <!-- Load Google Maps API (replace with your key) -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDjdnkFWOnh1u2cWf5RFURytU8Zk3fmOhk&callback=initMap" async defer></script>
 </body>
 </html>
