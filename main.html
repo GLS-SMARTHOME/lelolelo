@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Live Map – Vendre / Location / Course</title>
+  <style>
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Floating dropdown button (top-right) */
+    .menu {
+      position: fixed;
+      top: env(safe-area-inset-top, 16px);
+      right: env(safe-area-inset-right, 16px);
+      z-index: 5;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    .menu-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.1);
+      background: #ffffff;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+      cursor: pointer;
+      user-select: none;
+    }
+    .menu-btn span { font-weight: 600; }
+    .chev {
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 7px solid #111827;
+      transition: transform .18s ease;
+    }
+    .menu.open .chev { transform: rotate(180deg); }
+
+    .menu-list {
+      position: absolute;
+      right: 0;
+      margin-top: 8px;
+      min-width: 180px;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 12px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+      overflow: hidden;
+      display: none;
+    }
+    .menu.open .menu-list { display: block; }
+
+    .menu-item {
+      padding: 12px 14px;
+      font-size: 15px;
+      line-height: 1.1;
+      cursor: pointer;
+      transition: background .12s ease;
+      white-space: nowrap;
+    }
+    .menu-item:hover { background: #f3f4f6; }
+
+    /* Custom blue pulsing user marker */
+    .me-marker {
+      position: relative;
+      width: 16px;
+      height: 16px;
+      transform: translate(-50%, -50%);
+    }
+    .me-marker .dot {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #3b82f6;
+      box-shadow: 0 0 0 2px #ffffff;
+    }
+    .me-marker .pulse {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: rgba(59,130,246,0.35);
+      transform: translate(-50%, -50%);
+      animation: pulse 1.6s ease-out infinite;
+      pointer-events: none;
+    }
+    @keyframes pulse {
+      0% { transform: translate(-50%, -50%) scale(1); opacity: .8; }
+      70% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+      100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+    }
+
+    .legend {
+      position: fixed;
+      left: env(safe-area-inset-left, 16px);
+      bottom: env(safe-area-inset-bottom, 16px);
+      z-index: 5;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 10px;
+      font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Floating dropdown -->
+  <div class="menu" id="menu">
+    <button class="menu-btn" id="menuBtn" aria-haspopup="true" aria-expanded="false">
+      <span>Menu</span>
+      <div class="chev"></div>
+    </button>
+    <div class="menu-list">
+      <div class="menu-item" data-action="vendre">Vendre</div>
+      <div class="menu-item" data-action="location">Location</div>
+      <div class="menu-item" data-action="course">Course</div>
+    </div>
+  </div>
+
+  <div class="legend">• Blue dot = your live location</div>
+
+  <script>
+    // --- Dropdown logic
+    const menu = document.getElementById('menu');
+    const menuBtn = document.getElementById('menuBtn');
+    menuBtn.addEventListener('click', () => {
+      const isOpen = menu.classList.toggle('open');
+      menuBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target)) {
+        menu.classList.remove('open');
+        menuBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.querySelectorAll('.menu-item').forEach(item => {
+      item.addEventListener('click', () => {
+        alert('Action: ' + item.textContent);
+        menu.classList.remove('open');
+        menuBtn.setAttribute('aria-expanded', 'false');
+      });
+    });
+
+    // --- Map + Live location
+    let map, meMarker, accuracyCircle, watchId;
+    let firstUpdate = true;
+
+    class HtmlMarker extends google.maps.OverlayView {
+      constructor(position, html) {
+        super();
+        this.position = position;
+        this.html = html;
+        this.div = null;
+      }
+      onAdd() {
+        this.div = document.createElement('div');
+        this.div.innerHTML = this.html;
+        this.getPanes().overlayMouseTarget.appendChild(this.div);
+      }
+      draw() {
+        const proj = this.getProjection();
+        if (!proj || !this.div) return;
+        const point = proj.fromLatLngToDivPixel(this.position);
+        if (!point) return;
+        this.div.style.position = 'absolute';
+        this.div.style.left = point.x + 'px';
+        this.div.style.top = point.y + 'px';
+      }
+      onRemove() {
+        if (this.div && this.div.parentNode) this.div.parentNode.removeChild(this.div);
+        this.div = null;
+      }
+      setPosition(latLng) {
+        this.position = latLng;
+        this.draw();
+      }
+    }
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 0, lng: 0 },
+        zoom: 15,
+        mapTypeControl: false,
+        fullscreenControl: true,
+        streetViewControl: false,
+        clickableIcons: false,
+      });
+
+      if ('geolocation' in navigator) {
+        watchId = navigator.geolocation.watchPosition(
+          pos => {
+            const { latitude, longitude, accuracy } = pos.coords;
+            const latLng = new google.maps.LatLng(latitude, longitude);
+
+            const html = `
+              <div class="me-marker">
+                <div class="pulse"></div>
+                <div class="dot"></div>
+              </div>`;
+            if (!meMarker) {
+              meMarker = new HtmlMarker(latLng, html);
+              meMarker.setMap(map);
+            } else {
+              meMarker.setPosition(latLng);
+            }
+
+            if (!accuracyCircle) {
+              accuracyCircle = new google.maps.Circle({
+                strokeColor: '#3b82f6',
+                strokeOpacity: 0.25,
+                strokeWeight: 1,
+                fillColor: '#3b82f6',
+                fillOpacity: 0.10,
+                map,
+                center: latLng,
+                radius: accuracy || 30
+              });
+            } else {
+              accuracyCircle.setCenter(latLng);
+              accuracyCircle.setRadius(accuracy || 30);
+            }
+
+            // ✅ Center only on first update
+            if (firstUpdate) {
+              map.setCenter(latLng);
+              firstUpdate = false;
+            }
+          },
+          err => {
+            console.warn('Geolocation error:', err);
+            map.setZoom(2);
+            map.setCenter({ lat: 20, lng: 0 });
+            alert('Unable to get your location. Please allow location access.');
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 12000
+          }
+        );
+      } else {
+        map.setZoom(2);
+        map.setCenter({ lat: 20, lng: 0 });
+        alert('Geolocation not supported on this device/browser.');
+      }
+    }
+
+    window.initMap = initMap;
+  </script>
+
+  <!-- Google Maps JS API (replace YOUR_API_KEY) -->
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDjdnkFWOnh1u2cWf5RFURytU8Zk3fmOhk&callback=initMap">
+  </script>
+</body>
+</html>
