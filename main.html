@@ -15,21 +15,56 @@
       height: 100%;
       width: 100%;
     }
-    /* Dropdown button */
-    .dropdown {
+
+    /* Floating dropdown */
+    .menu {
+      position: fixed;
+      top: env(safe-area-inset-top, 16px);
+      right: env(safe-area-inset-right, 16px);
+      z-index: 5;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .menu-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.1);
+      background: #ffffff;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+      cursor: pointer;
+    }
+    .menu-btn span { font-weight: 600; }
+    .chev {
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 7px solid #111827;
+      transition: transform .18s ease;
+    }
+    .menu.open .chev { transform: rotate(180deg); }
+
+    .menu-list {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 9999;
+      right: 0;
+      margin-top: 8px;
+      min-width: 180px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+      display: none;
     }
-    select {
-      padding: 8px 12px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      background: white;
-      outline: none;
+    .menu.open .menu-list { display: block; }
+
+    .menu-item {
+      padding: 12px 14px;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background .12s ease;
     }
+    .menu-item:hover { background: #f3f4f6; }
+
     /* Blue dot style */
     .pulse {
       width: 20px;
@@ -56,68 +91,93 @@
   </style>
 </head>
 <body>
-  <!-- Dropdown -->
-  <div class="dropdown">
-    <select>
-      <option>Vendre</option>
-      <option>Location</option>
-      <option>Course</option>
-    </select>
+  
+  <!-- Floating dropdown -->
+  <div class="menu" id="menu">
+    <button class="menu-btn" id="menuBtn">
+      <span>Menu</span>
+      <div class="chev"></div>
+    </button>
+    <div class="menu-list">
+      <div class="menu-item" data-action="vendre">Vendre</div>
+      <div class="menu-item" data-action="location">Location</div>
+      <div class="menu-item" data-action="course">Course</div>
+    </div>
   </div>
 
   <!-- Map -->
   <div id="map"></div>
 
   <script>
-    let map, userMarker;
+    // Dropdown toggle
+    const menu = document.getElementById("menu");
+    const menuBtn = document.getElementById("menuBtn");
+
+    menuBtn.addEventListener("click", () => {
+      menu.classList.toggle("open");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!menu.contains(e.target)) {
+        menu.classList.remove("open");
+      }
+    });
+
+    // Google Maps + pulsing dot
+    let map, userOverlay, currentPos;
 
     function initMap() {
       map = new google.maps.Map(document.getElementById("map"), {
         zoom: 14,
-        center: { lat: 20, lng: 0 }, // fallback center
+        center: { lat: 20, lng: 0 }, // fallback
         disableDefaultUI: true,
       });
 
-      // Try to get user location
+      // Overlay for pulsing dot
+      function UserOverlay(position, map) {
+        this.position = position;
+        this.div = null;
+        this.setMap(map);
+      }
+
+      UserOverlay.prototype = new google.maps.OverlayView();
+
+      UserOverlay.prototype.onAdd = function () {
+        const div = document.createElement("div");
+        div.className = "pulse";
+        this.div = div;
+        const panes = this.getPanes();
+        panes.overlayLayer.appendChild(div);
+      };
+
+      UserOverlay.prototype.draw = function () {
+        if (!this.div) return;
+        const overlayProjection = this.getProjection();
+        const pos = overlayProjection.fromLatLngToDivPixel(this.position);
+        this.div.style.left = pos.x - 10 + "px";
+        this.div.style.top = pos.y - 10 + "px";
+        this.div.style.position = "absolute";
+      };
+
+      UserOverlay.prototype.onRemove = function () {
+        if (this.div) {
+          this.div.parentNode.removeChild(this.div);
+          this.div = null;
+        }
+      };
+
+      // Geolocation tracking
       if (navigator.geolocation) {
         navigator.geolocation.watchPosition(
           (pos) => {
-            const userPos = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-            };
-
-            // Center map on first location update
-            if (!userMarker) {
-              map.setCenter(userPos);
-              userMarker = new google.maps.OverlayView();
-              userMarker.onAdd = function () {
-                const div = document.createElement("div");
-                div.className = "pulse";
-                this.div = div;
-                const panes = this.getPanes();
-                panes.overlayImage.appendChild(div);
-              };
-              userMarker.draw = function () {
-                const overlayProjection = this.getProjection();
-                const pos = overlayProjection.fromLatLngToDivPixel(
-                  new google.maps.LatLng(userPos)
-                );
-                if (pos && this.div) {
-                  this.div.style.left = pos.x - 10 + "px";
-                  this.div.style.top = pos.y - 10 + "px";
-                  this.div.style.position = "absolute";
-                }
-              };
-              userMarker.onRemove = function () {
-                if (this.div) {
-                  this.div.parentNode.removeChild(this.div);
-                  this.div = null;
-                }
-              };
-              userMarker.setMap(map);
+            currentPos = new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+            if (!userOverlay) {
+              userOverlay = new UserOverlay(currentPos, map);
+              map.setCenter(currentPos);
             } else {
-              map.setCenter(userPos);
+              userOverlay.position = currentPos;
+              userOverlay.draw(); // update overlay position
+              map.setCenter(currentPos);
             }
           },
           (err) => {
@@ -132,7 +192,7 @@
     }
   </script>
 
-  <!-- Load Google Maps API (replace with your key) -->
+  <!-- Load Google Maps API (replace YOUR_API_KEY with your key) -->
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDjdnkFWOnh1u2cWf5RFURytU8Zk3fmOhk&callback=initMap" async defer></script>
 </body>
 </html>
