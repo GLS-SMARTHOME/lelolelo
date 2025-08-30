@@ -129,6 +129,104 @@
   <!-- Map -->
   <div id="map"></div>
 
+<!-- Add this inside <body> after your map div -->
+
+<!-- Vendre Form Modal -->
+<div id="vendreModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+  background:rgba(0,0,0,0.5); z-index:20; justify-content:center; align-items:center;">
+  <div style="background:#fff; padding:20px; border-radius:12px; width:90%; max-width:400px; position:relative;">
+    <h2>Vendre Item</h2>
+    <label>Title (Phone, Car, Shoe):</label>
+    <input type="text" id="itemTitle" placeholder="Title" style="width:100%; margin-bottom:10px;"/>
+    <label>Price:</label>
+    <input type="number" id="itemPrice" placeholder="Price" style="width:100%; margin-bottom:10px;"/>
+    <label>Detail:</label>
+    <textarea id="itemDetail" placeholder="Detail" style="width:100%; margin-bottom:10px;"></textarea>
+    <label>Phone Number:</label>
+    <input type="text" id="itemPhone" placeholder="Phone Number" style="width:100%; margin-bottom:10px;"/>
+    <label>Pictures:</label>
+    <input type="file" id="itemPictures" multiple style="margin-bottom:10px;"/>
+    <button id="saveItemBtn" style="width:100%; padding:10px; background:#3b82f6; color:#fff; border:none; border-radius:8px;">Save</button>
+    <button onclick="closeModal()" style="position:absolute; top:10px; right:10px; background:none; border:none; font-size:18px;">&times;</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+<script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const storage = firebase.storage();
+
+  // Open modal when Vendre clicked
+  document.querySelector('[data-action="vendre"]').addEventListener('click', () => {
+    document.getElementById('vendreModal').style.display = 'flex';
+    menu.classList.remove('open');
+  });
+
+  function closeModal() {
+    document.getElementById('vendreModal').style.display = 'none';
+  }
+
+  // Save button
+  document.getElementById('saveItemBtn').addEventListener('click', async () => {
+    const title = document.getElementById('itemTitle').value.trim();
+    const price = document.getElementById('itemPrice').value.trim();
+    const detail = document.getElementById('itemDetail').value.trim();
+    const phone = document.getElementById('itemPhone').value.trim();
+    const pictures = document.getElementById('itemPictures').files;
+
+    if (!title || !price || !detail || !phone) {
+      alert("Please fill all fields.");
+      return;
+    }
+
+    if (!currentPos) {
+      alert("Location not found yet.");
+      return;
+    }
+
+    const lat = currentPos.lat();
+    const lng = currentPos.lng();
+
+    // Upload pictures to Firebase Storage
+    let pictureURLs = [];
+    for (let i = 0; i < pictures.length; i++) {
+      const file = pictures[i];
+      const storageRef = storage.ref().child(`items/${phone}/${Date.now()}_${file.name}`);
+      await storageRef.put(file);
+      const url = await storageRef.getDownloadURL();
+      pictureURLs.push(url);
+    }
+
+    // Save to RTDB
+    const itemRef = db.ref(`${phone}/${title}`);
+    await itemRef.set({
+      price,
+      detail,
+      pictures: pictureURLs,
+      lat,
+      lng
+    });
+
+    alert("Item saved successfully!");
+    closeModal();
+  });
+</script>
+
+
   <!-- Recenter button -->
   <button class="recenter-btn" id="recenterBtn">&#128269;</button>
 
