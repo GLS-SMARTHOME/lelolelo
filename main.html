@@ -59,7 +59,6 @@
     .menu-item {
       padding: 12px 14px;
       font-size: 15px;
-      line-height: 1.1;
       cursor: pointer;
       transition: background .12s ease;
       white-space: nowrap;
@@ -107,6 +106,25 @@
       border-radius: 10px;
       font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
+
+    /* Locate Me button */
+    .locate-btn {
+      position: fixed;
+      right: env(safe-area-inset-right, 16px);
+      bottom: env(safe-area-inset-bottom, 80px);
+      z-index: 5;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+      cursor: pointer;
+    }
+    .locate-btn:hover { background: #f9fafb; }
   </style>
 </head>
 <body>
@@ -126,6 +144,7 @@
   </div>
 
   <div class="legend">• Blue dot = your live location</div>
+  <div class="locate-btn" id="locateBtn" title="Locate Me">📍</div>
 
   <script>
     // --- Dropdown logic
@@ -152,6 +171,7 @@
     // --- Map + Live location
     let map, meMarker, accuracyCircle, watchId;
     let firstUpdate = true;
+    let lastLatLng = null;
 
     class HtmlMarker extends google.maps.OverlayView {
       constructor(position, html) {
@@ -199,6 +219,7 @@
           pos => {
             const { latitude, longitude, accuracy } = pos.coords;
             const latLng = new google.maps.LatLng(latitude, longitude);
+            lastLatLng = latLng;
 
             const html = `
               <div class="me-marker">
@@ -235,23 +256,42 @@
             }
           },
           err => {
-            console.warn('Geolocation error:', err);
+            let msg = "Unable to get your location. ";
+            switch (err.code) {
+              case err.PERMISSION_DENIED:
+                msg += "Permission denied. Please allow location access in your browser settings.";
+                break;
+              case err.POSITION_UNAVAILABLE:
+                msg += "Location information is unavailable.";
+                break;
+              case err.TIMEOUT:
+                msg += "The request timed out.";
+                break;
+              default:
+                msg += "An unknown error occurred.";
+            }
+            alert(msg);
             map.setZoom(2);
             map.setCenter({ lat: 20, lng: 0 });
-            alert('Unable to get your location. Please allow location access.');
           },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 5000,
-            timeout: 12000
-          }
+          { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
         );
       } else {
+        alert('Geolocation not supported on this device/browser.');
         map.setZoom(2);
         map.setCenter({ lat: 20, lng: 0 });
-        alert('Geolocation not supported on this device/browser.');
       }
     }
+
+    // --- Locate Me button
+    document.getElementById('locateBtn').addEventListener('click', () => {
+      if (lastLatLng) {
+        map.panTo(lastLatLng);
+        map.setZoom(16);
+      } else {
+        alert("No location available yet.");
+      }
+    });
 
     window.initMap = initMap;
   </script>
